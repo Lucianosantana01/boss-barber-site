@@ -262,8 +262,35 @@ window.addEventListener('load', () => {
 
 // Sistema de Agendamento e WhatsApp
 const whatsappNumber = '5519991597431';
-const whatsappMessage = 'Olá! Gostaria de agendar um horário ou consultar na Boss Barber.';
 const agendamentoUrl = 'https://agendamentos.bestbarbers.app/barbershop/bossbarber';
+const whatsappMessageDefault = `Olá, tudo bem? 
+
+Vim pelo site da Boss Barber e gostaria de agendar um horário.`.trim();
+const whatsappMessageConsultoriaVisagismo = `Olá, tudo bem?
+
+Vim pelo site da Boss Barber e gostaria de agendar uma consultoria de visagismo. Pode me informar os horários disponíveis?`.trim();
+
+function getActiveServiceTab() {
+    const active = document.querySelector('.service-tab-content.active');
+    return active ? active.getAttribute('data-content') : null;
+}
+
+function getWhatsappMessageForContext(el) {
+    const mode = (el.getAttribute('data-wa') || '').trim();
+    if (mode === 'consult' || mode === 'visagista' || mode === 'consultoria') {
+        return whatsappMessageConsultoriaVisagismo;
+    }
+
+    // float button: muda automaticamente se o usuário estiver na aba "Consultoria Visagista"
+    if (el.classList.contains('whatsapp-float')) {
+        if (getActiveServiceTab() === 'visagista') {
+            return whatsappMessageConsultoriaVisagismo;
+        }
+        return whatsappMessageDefault;
+    }
+
+    return whatsappMessageDefault;
+}
 
 // Botões de agendamento direcionam para o sistema
 document.querySelectorAll('.btn-primary, .btn-secondary, .btn-service-agendar').forEach(btn => {
@@ -275,15 +302,15 @@ document.querySelectorAll('.btn-primary, .btn-secondary, .btn-service-agendar').
     }
 });
 
-// Botões de WhatsApp: usa href próprio se já tiver mensagem, senão usa a padrão
+// Botões de WhatsApp: a mensagem é definida no JS (para evitar `?text=` desatualizado no HTML)
 document.querySelectorAll('.btn-whatsapp, .whatsapp-float').forEach(btn => {
     const href = btn.getAttribute('href') || '';
-    if (href.includes('wa.me') && href.includes('text=')) {
-        return; // já tem mensagem personalizada, deixa o href funcionar
-    }
+    const base = href.includes('wa.me') ? (href.split('?')[0] || `https://wa.me/${whatsappNumber}`) : `https://wa.me/${whatsappNumber}`;
+
     btn.addEventListener('click', (e) => {
         e.preventDefault();
-        const url = href.includes('wa.me') ? `${href.split('?')[0]}?text=${encodeURIComponent(whatsappMessage)}` : `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(whatsappMessage)}`;
+        const message = getWhatsappMessageForContext(btn);
+        const url = `${base}?text=${encodeURIComponent(message)}`;
         window.open(url, '_blank');
     });
 });
