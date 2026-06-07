@@ -595,7 +595,9 @@ function startTestimonialsCarousel() {
     requestAnimationFrame(animate);
 }
 
-// Google Reviews - Carrega depoimentos reais do Google Places API
+const GOOGLE_REVIEWS_TOTAL_FALLBACK = 447;
+
+// Google Reviews - tenta carregar via API; se não existir, usa dados revisados.
 (async function loadGoogleReviews() {
     const grid = document.getElementById('testimonials-track');
     const loading = document.getElementById('testimonials-loading');
@@ -615,13 +617,13 @@ function startTestimonialsCarousel() {
             const errMsg = (data.error || data.message || res.statusText) || 'Erro desconhecido';
             grid.parentElement?.classList.add('testimonials-error-state');
             grid.innerHTML = `<p class="testimonials-error">Depoimentos em manutenção. Volte em breve!</p><p class="testimonials-debug" style="font-size:11px;color:#888;margin-top:8px;">${errMsg}</p>`;
-            if (ratingCount) ratingCount.textContent = 'Com base em 1369 avaliações';
+            if (ratingCount) ratingCount.textContent = `Com base em ${GOOGLE_REVIEWS_TOTAL_FALLBACK} avaliações`;
             const btnVer = document.getElementById('btn-ver-avaliacoes');
             if (btnVer) btnVer.innerHTML = 'Ver avaliações no Google <i class="fas fa-external-link-alt"></i>';
             return;
         }
 
-        const totalReviews = data.totalReviews || 1369;
+        const totalReviews = data.totalReviews || GOOGLE_REVIEWS_TOTAL_FALLBACK;
         if (ratingCount) ratingCount.textContent = `Com base em ${totalReviews} avaliações`;
         
         const btnVerAvaliacoes = document.getElementById('btn-ver-avaliacoes');
@@ -701,9 +703,9 @@ function startTestimonialsCarousel() {
             </div>
         `).join('');
         grid.innerHTML = fallbackHtml + fallbackHtml;
-        if (ratingCount) ratingCount.textContent = 'Com base em 1369 avaliações';
+        if (ratingCount) ratingCount.textContent = `Com base em ${GOOGLE_REVIEWS_TOTAL_FALLBACK} avaliações`;
         const btnVerAvaliacoes = document.getElementById('btn-ver-avaliacoes');
-        if (btnVerAvaliacoes) btnVerAvaliacoes.innerHTML = 'Ver todas as 1369 avaliações no Google <i class="fas fa-external-link-alt"></i>';
+        if (btnVerAvaliacoes) btnVerAvaliacoes.innerHTML = `Ver todas as ${GOOGLE_REVIEWS_TOTAL_FALLBACK} avaliações no Google <i class="fas fa-external-link-alt"></i>`;
         startTestimonialsCarousel();
     }
 })();
