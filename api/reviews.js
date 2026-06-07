@@ -22,48 +22,73 @@ function getGoogleStatusMessage(status, message) {
   return messages[status] || `Google Places retornou status ${status || 'desconhecido'}.`;
 }
 
-async function fetchGoogleJson(url) {
-  const response = await fetch(url);
+async function fetchGoogleJson(url, options = {}) {
+  const response = await fetch(url, options);
   const data = await response.json();
 
-  if (!response.ok || (data.status && data.status !== 'OK')) {
-    const status = data.status || response.status;
-    throw new Error(getGoogleStatusMessage(status, data.error_message));
+  if (!response.ok || data.error) {
+    const status = data.error?.status || data.status || response.status;
+    const message = data.error?.message || data.error_message;
+    throw new Error(getGoogleStatusMessage(status, message));
   }
 
   return data;
 }
 
-async function findPlaceId(apiKey, search, location) {
-  const params = new URLSearchParams({
-    input: search,
-    inputtype: 'textquery',
-    fields: 'place_id,name,formatted_address',
-    language: DEFAULT_LANGUAGE,
-    key: apiKey,
-  });
+function parseLocation(location) {
+  if (!location) return null;
 
-  if (location) {
-    params.set('locationbias', `point:${location}`);
+  const [lat, lng] = location.split(',').map((part) => Number(part.trim()));
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return null;
   }
 
-  const data = await fetchGoogleJson(`https://maps.googleapis.com/maps/api/place/findplacefromtext/json?${params}`);
-  const place = data.candidates && data.candidates[0];
+  return { latitude: lat, longitude: lng };
+}
 
-  if (!place || !place.place_id) {
+async function findPlaceId(apiKey, search, location) {
+  const center = parseLocation(location);
+  const body = {
+    textQuery: search,
+    languageCode: DEFAULT_LANGUAGE,
+  };
+
+  if (center) {
+    body.locationBias = {
+      circle: {
+        center,
+        radius: 5000,
+      },
+    };
+  }
+
+  const data = await fetchGoogleJson('https://places.googleapis.com/v1/places:searchText', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Goog-Api-Key': apiKey,
+      'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress',
+    },
+    body: JSON.stringify(body),
+  });
+
+  const place = data.places && data.places[0];
+
+  if (!place || !place.id) {
     throw new Error('Google Places nao retornou place_id para a busca configurada.');
   }
 
-  return place.place_id;
+  return place.id;
 }
 
 function mapReview(review) {
   return {
-    author: review.author_name || 'Cliente',
+    author: review.authorAttribution?.displayName || 'Cliente',
     rating: review.rating || 5,
-    text: review.text || '',
-    time: review.relative_time_description || '',
-    photo: review.profile_photo_url || '',
+    text: review.text?.text || review.originalText?.text || '',
+    time: review.relativePublishTimeDescription || '',
+    photo: review.authorAttribution?.photoUri || '',
   };
 }
 
@@ -88,23 +113,29 @@ module.exports = async function handler(req, res) {
         process.env.GOOGLE_PLACE_LOCATION || ''
       );
 
-    const params = new URLSearchParams({
-      place_id: placeId,
-      fields: 'name,rating,user_ratings_total,reviews,url,place_id',
-      reviews_sort: 'newest',
-      language: DEFAULT_LANGUAGE,
-      key: apiKey,
+    const detailsUrl = new URL(`https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`);
+    detailsUrl.searchParams.set('languageCode', DEFAULT_LANGUAGE);
+
+    const place = await fetchGoogleJson(detailsUrl, {
+      headers: {
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask': [
+          'id',
+          'displayName',
+          'rating',
+          'userRatingCount',
+          'reviews',
+          'googleMapsUri',
+        ].join(','),
+      },
     });
 
-    const data = await fetchGoogleJson(`https://maps.googleapis.com/maps/api/place/details/json?${params}`);
-    const place = data.result || {};
-
     return sendJson(res, 200, {
-      name: place.name || 'Boss Barber',
+      name: place.displayName?.text || 'Boss Barber',
       rating: place.rating || 5,
-      totalReviews: place.user_ratings_total || 0,
-      googleUrl: place.url || '',
-      placeId: place.place_id || placeId,
+      totalReviews: place.userRatingCount || 0,
+      googleUrl: place.googleMapsUri || '',
+      placeId: place.id || placeId,
       reviews: (place.reviews || []).map(mapReview).filter((review) => review.text),
     });
   } catch (error) {
